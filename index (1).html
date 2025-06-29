@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Budger - AI Voice Assistant</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background: #000;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      height: 100vh;
+      color: #fff;
+    }
+
+    #sidebar {
+      width: 20%;
+      padding: 20px;
+      background: #111;
+      overflow-y: auto;
+      border-right: 1px solid #333;
+    }
+
+    #main-container {
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 30px;
+      background: #000;
+    }
+
+    #right-panel {
+      width: 20%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #000;
+    }
+
+    #assistant-avatar {
+      width: 200px;
+      height: 200px;
+      border-radius: 50%;
+      background: radial-gradient(circle at center, #b3e5fc, #0288d1);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 3rem;
+      font-weight: bold;
+      color: white;
+      box-shadow: 0 0 40px #81d4fa, 0 0 80px #81d4fa;
+      animation: sparkle 2s infinite;
+    }
+
+    @keyframes sparkle {
+      0%, 100% { box-shadow: 0 0 20px #81d4fa, 0 0 40px #0288d1; }
+      50% { box-shadow: 0 0 40px #81d4fa, 0 0 80px #b3e5fc; }
+    }
+
+    input, button {
+      padding: 10px;
+      font-size: 1rem;
+      margin-top: 10px;
+      width: 100%;
+      border-radius: 6px;
+      border: none;
+    }
+
+    #chat-section {
+      display: none;
+      max-width: 600px;
+      width: 100%;
+    }
+
+    #response {
+      margin-top: 1rem;
+      padding: 1rem;
+      background: #111;
+      border-radius: 8px;
+      border-left: 4px solid #03a9f4;
+      color: #fff;
+    }
+
+    .message {
+      margin-bottom: 10px;
+      padding: 10px;
+      background: #1a1a1a;
+      border-radius: 6px;
+      color: #81d4fa;
+    }
+  </style>
+</head>
+<body>
+  <div id="sidebar">
+    <h3>Chat History</h3>
+    <div id="history"></div>
+  </div>
+
+  <div id="main-container">
+    <h1>🐦 Budger - Voice Assistant</h1>
+
+    <div id="password-section">
+      <label>🔐 Enter Password:</label>
+      <input type="password" id="passwordInput" placeholder="Enter password"/>
+      <button onclick="checkPassword()">Unlock</button>
+      <p id="password-error" style="color: red;"></p>
+    </div>
+
+    <div id="chat-section">
+      <input type="text" id="queryInput" placeholder="Ask me anything..." onkeypress="handleEnter(event)" />
+      <div style="display: flex; gap: 10px;">
+        <button onclick="sendQuery()">Send</button>
+        <button onclick="startVoiceInput()">🎤</button>
+        <button onclick="stopSpeaking()">Stop</button>
+      </div>
+      <div id="response"></div>
+    </div>
+  </div>
+
+  <div id="right-panel">
+    <div id="assistant-avatar">🧠</div>
+  </div>
+
+  <script>
+    const CORRECT_PASSWORD = "komal123";
+    const inputBox = document.getElementById("queryInput");
+
+    function checkPassword() {
+      const password = document.getElementById("passwordInput").value;
+      const errorBox = document.getElementById("password-error");
+
+      if (password === CORRECT_PASSWORD) {
+        document.getElementById("password-section").style.display = "none";
+        document.getElementById("chat-section").style.display = "block";
+        inputBox.focus();
+      } else {
+        errorBox.textContent = "❌ Incorrect password.";
+      }
+    }
+
+    function updateHistory(user, reply) {
+      const historyDiv = document.getElementById("history");
+      const messageDiv = document.createElement("div");
+      messageDiv.classList.add("message");
+      messageDiv.innerHTML = `<strong>You:</strong> ${user}<br><strong>AI:</strong> ${reply}`;
+      historyDiv.prepend(messageDiv);
+    }
+
+    async function sendQuery() {
+      const query = inputBox.value.trim();
+      const responseBox = document.getElementById("response");
+
+      if (!query) {
+        responseBox.innerText = "Please ask something.";
+        return;
+      }
+
+      responseBox.innerText = "⏳ Thinking...";
+
+      try {
+        const res = await fetch("http://127.0.0.1:8000/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ query })
+        });
+
+        const data = await res.json();
+
+        if (data.response) {
+          responseBox.innerText = data.response;
+          speakText(data.response);
+          updateHistory(query, data.response);
+          inputBox.value = "";
+        } else {
+          responseBox.innerText = "❌ Error: " + (data.detail || "Unexpected error");
+        }
+      } catch (err) {
+        responseBox.innerText = "❌ Error: " + err.message;
+      }
+    }
+
+    function handleEnter(event) {
+      if (event.key === "Enter") sendQuery();
+    }
+
+    function speakText(text) {
+      const utterance = new SpeechSynthesisUtterance(text);
+      const isHindi = /[\u0900-\u097F]/.test(text);
+      utterance.lang = isHindi ? "hi-IN" : "en-US";
+      speechSynthesis.speak(utterance);
+    }
+
+    function stopSpeaking() {
+      if (speechSynthesis.speaking) {
+        speechSynthesis.cancel();
+      }
+    }
+
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    const recognition = SpeechRecognition ? new SpeechRecognition() : null;
+
+    if (recognition) {
+      recognition.lang = "en-IN";
+      recognition.interimResults = false;
+      recognition.maxAlternatives = 1;
+
+      recognition.onresult = function (event) {
+        const transcript = event.results[0][0].transcript;
+        inputBox.value = transcript;
+        sendQuery();
+      };
+
+      recognition.onerror = function (event) {
+        alert("Voice Recognition Error: " + event.error);
+      };
+    }
+
+    function startVoiceInput() {
+      if (!recognition) {
+        alert("Your browser does not support voice input.");
+        return;
+      }
+
+      recognition.start();
+    }
+
+    window.speechSynthesis.onvoiceschanged = () => {};
+  </script>
+</body>
+</html>
